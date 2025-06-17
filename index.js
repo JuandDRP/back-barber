@@ -99,3 +99,22 @@ app.post('/disponibilidad', async (req, res) => {
   );
   res.status(201).json({ mensaje: 'Disponibilidad actualizada correctamente' });
 });
+app.post('/login', async (req, res) => {
+  const { usuario, contrasena } = req.body;
+  if (!usuario || !contrasena) {
+    return res.status(400).json({ acceso: false, mensaje: 'Faltan datos' });
+  }
+  try {
+    const adminCol = db.collection('admin');
+    const admin = await adminCol.findOne({ usuario, contrasena });
+
+    if (admin) {
+      return res.json({ acceso: true });
+    } else {
+      return res.status(401).json({ acceso: false, mensaje: 'Credenciales inválidas' });
+    }
+  } catch (err) {
+    console.error('Error en login:', err);
+    return res.status(500).json({ acceso: false, mensaje: 'Error del servidor' });
+  }
+});
