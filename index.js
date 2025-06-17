@@ -2,49 +2,21 @@ const express = require('express');
 const app = express();
 const cors = require("cors");
 const conectarDB = require('./db');
-
 app.use(cors());
 app.use(express.json());
-
-let db, reservasCol, disponibilidadesCol;
-
-app.get('/', (req, res) => {
-  res.send('Hola desde Express y MongoDB 🚀');
-});
-
-
+let db, reservasCol, disponibilidadesCol, clientesCol;
 conectarDB().then((database) => {
   db = database;
   reservasCol = db.collection('reservas');
   disponibilidadesCol = db.collection('disponibilidades');
-  app.listen(3000, () => {
+  clientesCol = db.collection('clientes');
+  app.listen(3001, () => {
     console.log('🚀 Servidor escuchando en http://localhost:3000');
   });
 });
-
-
-app.post('/disponibilidad', async (req, res) => {
-  const { barbero, fecha, horas } = req.body;
-  if (!barbero || !fecha || !Array.isArray(horas)) {
-    return res.status(400).json({ error: 'Faltan datos: barbero, fecha u horas' });
-  }
-  const barberosPermitidos = ['Juan', 'Camilo'];
-  if (!barberosPermitidos.includes(barbero)) {
-    return res.status(400).json({ error: 'Barbero no válido. Solo se permiten Juan o Camilo.' });
-  }
-  const resultado = await disponibilidadesCol.updateOne(
-    { barbero, fecha },
-    {
-      $addToSet: {
-        horas: { $each: horas }
-      }
-    },
-    { upsert: true } 
-  );
-  res.status(201).json({ mensaje: 'Disponibilidad actualizada correctamente' });
+app.get('/', (req, res) => {
+  res.send('Hola desde Express y MongoDB 🚀');
 });
-
-
 app.get('/disponibilidad/:barbero/:fecha', async (req, res) => {
   const { barbero, fecha } = req.params;
   const barberosPermitidos = ['Juan', 'Camilo'];
@@ -62,12 +34,19 @@ app.get('/disponibilidad/:barbero/:fecha', async (req, res) => {
   );
   res.json({ barbero, fecha, disponibles });
 });
-
-
+app.get('/clientes', async (req, res) => {
+  const clientes = await db.collection('clientes').find({}).toArray();
+  res.json(clientes);
+});
+app.get('/reservas/:fecha', async (req, res) => {
+  const { fecha } = req.params;
+  const reservas = await db.collection('reservas').find({ fecha }).toArray();
+  res.json(reservas);
+});
 app.post('/reservar', async (req, res) => {
-  const { nombreCliente, barbero, fecha, hora } = req.body;
-  if (!nombreCliente || !barbero || !fecha || !hora) {
-    return res.status(400).json({ error: 'Faltan datos: nombreCliente, barbero, fecha u hora' });
+  const { nombreCliente, numeroCelular, barbero, fecha, hora } = req.body;
+  if (!nombreCliente || !numeroCelular || !barbero || !fecha || !hora) {
+    return res.status(400).json({ error: 'Faltan datos: nombre cliente,numero celular, barbero, fecha u hora' });
   }
   const barberosPermitidos = ['Juan', 'Camilo'];
   if (!barberosPermitidos.includes(barbero)) {
@@ -77,12 +56,46 @@ app.post('/reservar', async (req, res) => {
   if (yaReservado) {
     return res.status(400).json({ error: 'Horario ya reservado' });
   }
-  const nuevaReserva = {
-    nombreCliente,
-    barbero,
-    fecha,
-    hora
-  };
+  const nuevaReserva = { nombreCliente, numeroCelular, barbero, fecha, hora };
   await reservasCol.insertOne(nuevaReserva);
-  res.status(201).json({ mensaje: 'Reserva realizada con éxito', reserva: nuevaReserva });
+  const clienteExistente = await clientesCol.findOne({ numeroCelular });
+  if (clienteExistente) {
+    await clientesCol.updateOne(
+      { numeroCelular },
+      {
+        $inc: { peluqueadas: 1 },
+        $set: { nombreCliente }
+      }
+    );
+  } else {
+    await clientesCol.insertOne({
+      numeroCelular,
+      nombreCliente,
+      peluqueadas: 1
+    });
+  }
+  res.status(201).json({
+    mensaje: 'Reserva realizada con éxito',
+    reserva: nuevaReserva
+  });
+});
+app.post('/disponibilidad', async (req, res) => {
+  const { barbero, fecha, horas } = req.body;
+  if (!barbero || !fecha || !Array.isArray(horas)) {
+    return res.status(400).json({ error: 'Faltan datos: barbero, fecha u horas' });
+  }
+  const barberosPermitidos = ['Juan', 'Camilo'];
+  if (!barberosPermitidos.includes(barbero)) {
+    return res.status(400).json({ error: 'Barbero no válido. Solo se permiten Juan o Camilo.' });
+  }
+  const resultado = await disponibilidadesCol.updateOne(
+    { barbero, fecha },
+    {
+      $addToSet: {
+        horas: { $each: horas }
+      }
+    },
+    { upsert: true }
+  );
+  res.status(201).json({ mensaje: 'Disponibilidad actualizada correctamente' });
 });
