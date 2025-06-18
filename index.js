@@ -11,7 +11,7 @@ conectarDB().then((database) => {
   disponibilidadesCol = db.collection('disponibilidades');
   clientesCol = db.collection('clientes');
   app.listen(3001, () => {
-    console.log('🚀 Servidor escuchando en http://localhost:3000');
+    console.log('🚀 Servidor escuchando en http://localhost:3001');
   });
 });
 app.get('/', (req, res) => {
@@ -116,5 +116,37 @@ app.post('/login', async (req, res) => {
   } catch (err) {
     console.error('Error en login:', err);
     return res.status(500).json({ acceso: false, mensaje: 'Error del servidor' });
+  }
+});
+app.post('/eliminarReserva', async (req, res) => {
+  const { barbero, fecha, hora, numeroCelular } = req.body;
+  if (!barbero || !fecha || !hora || !numeroCelular) {
+    return res.status(400).json({ error: 'Faltan datos: barbero, fecha, hora o numeroCelular' });
+  }
+  try {
+    const resultado = await reservasCol.deleteOne({ barbero, fecha, hora, numeroCelular });
+    if (resultado.deletedCount === 0) {
+      return res.status(404).json({ error: 'Reserva no encontrada' });
+    }
+    await clientesCol.updateOne(
+      { numeroCelular },
+      [
+        {
+          $set: {
+            peluqueadas: {
+              $cond: [
+                { $gt: ["$peluqueadas", 0] },
+                { $subtract: ["$peluqueadas", 1] },
+                0
+              ]
+            }
+          }
+        }
+      ]
+    );
+    res.json({ mensaje: 'Reserva eliminada y cliente actualizado' });
+  } catch (err) {
+    console.error('Error al eliminar reserva:', err);
+    res.status(500).json({ error: 'Error al eliminar la reserva' });
   }
 });
